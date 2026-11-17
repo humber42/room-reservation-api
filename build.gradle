@@ -28,6 +28,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     runtimeOnly 'com.h2database:h2'
 
+    // JAXB: Hibernate 7 las necesita en runtime y no siempre las resuelve bien el IDE
+    implementation 'jakarta.xml.bind:jakarta.xml.bind-api'
+    runtimeOnly 'org.glassfish.jaxb:jaxb-runtime'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'

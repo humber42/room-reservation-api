@@ -1,0 +1,864 @@
+{
+  "info": {
+    "name": "Room Reservation API — pruebas locales",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Ejecutar en orden con Collection Runner, una iteración. La primera petición crea una sala única y fechas UTC para mañana. Captura IDs automáticamente. Las últimas peticiones cancelan las reservas; la sala y el historial permanecen porque la API no ofrece borrado físico. Usar una base local de pruebas. Las pruebas de carrera se ejecutan en la suite Java, no en este recorrido secuencial."
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{username}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{password}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "roomId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "roomName",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "roomNameUpper",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adjacentBookingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "replacementBookingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "startAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "endAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adjacentEndAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "preciseStartAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "date",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Crear sala y preparar ejecución",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{roomName}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.replaceIn('{{$guid}}');",
+              "pm.collectionVariables.set('roomName', 'Postman-' + runId);",
+              "pm.collectionVariables.set('roomNameUpper', ('Postman-' + runId).toUpperCase());",
+              "['roomId','bookingId','adjacentBookingId','replacementBookingId'].forEach(k => pm.collectionVariables.unset(k));",
+              "const start = new Date(); start.setUTCDate(start.getUTCDate()+1); start.setUTCHours(10,0,0,0);",
+              "pm.collectionVariables.set('date', start.toISOString().slice(0,10));",
+              "pm.collectionVariables.set('startAt', start.toISOString());",
+              "pm.collectionVariables.set('endAt', new Date(start.getTime()+3600000).toISOString());",
+              "pm.collectionVariables.set('adjacentEndAt', new Date(start.getTime()+7200000).toISOString());",
+              "pm.collectionVariables.set('preciseStartAt', start.toISOString().replace('.000Z','.000000001Z'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const room = pm.response.json(); pm.collectionVariables.set('roomId', String(room.id));",
+              "pm.test('Sala creada y capacidad predeterminada', () => { pm.expect(room.name).to.eql(pm.collectionVariables.get('roomName')); pm.expect(room.capacity).to.eql(1); pm.expect(pm.response.headers.get('Location')).to.eql('/api/rooms/' + room.id); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Listar salas sin autenticación",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/rooms",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Sala presente', () => pm.expect(pm.response.json().some(r => String(r.id) === pm.collectionVariables.get('roomId'))).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Consultar sala",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/rooms/{{roomId}}",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('ID correcto', () => pm.expect(String(pm.response.json().id)).to.eql(pm.collectionVariables.get('roomId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Nombre duplicado con otra capitalización",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{roomNameUpper}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Crear reserva",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const b=pm.response.json(); pm.collectionVariables.set('bookingId',String(b.id)); pm.test('Reserva activa',()=>{pm.expect(b.status).to.eql('ACTIVE');pm.expect(String(b.roomId)).to.eql(pm.collectionVariables.get('roomId'));pm.expect(pm.response.headers.get('Location')).to.eql('/api/bookings/'+b.id);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Consultar reserva sin autenticación",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Reserva activa',()=>pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Rechazar solapamiento",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Aceptar reserva adyacente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{endAt}}\",\n  \"endAt\": \"{{adjacentEndAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('adjacentBookingId',String(pm.response.json().id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Listar con filtros UTC y paginación",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings?roomId={{roomId}}&date={{date}}&page=0&size=1",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Primera página',()=>{const b=pm.response.json();pm.expect(b.page).to.eql(0);pm.expect(b.size).to.eql(1);pm.expect(b.totalElements).to.eql(2);pm.expect(b.totalPages).to.eql(2);pm.expect(String(b.content[0].id)).to.eql(pm.collectionVariables.get('bookingId'));});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Segunda página",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings?roomId={{roomId}}&date={{date}}&page=1&size=1",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Reserva adyacente',()=>pm.expect(String(pm.response.json().content[0].id)).to.eql(pm.collectionVariables.get('adjacentBookingId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Intervalo inválido",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{startAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Precisión superior a microsegundos",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{preciseStartAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Responsable vacío",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \" \",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Capacidad inválida",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Invalid\",\n  \"capacity\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Paginación inválida",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings?size=101",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Sala inexistente",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/rooms/9223372036854775807",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Reserva inexistente",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/9223372036854775807",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().status).to.eql(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Crear sin autenticación",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Desafío Basic',()=>pm.expect(pm.response.headers.get('WWW-Authenticate')).to.include('Basic'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Cancelar sin autenticación",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Credenciales incorrectas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "invalid-{{$guid}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Cancelar reserva",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204', () => pm.response.to.have.status(204));",
+              "pm.test('Sin cuerpo',()=>pm.expect(pm.response.text()).to.eql('')); "
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Repetir cancelación idempotente",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Consultar estado cancelado",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Cancelada',()=>pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Reutilizar horario liberado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": {{roomId}},\n  \"responsible\": \"Postman Runner\",\n  \"startAt\": \"{{startAt}}\",\n  \"endAt\": \"{{endAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('replacementBookingId',String(pm.response.json().id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 Cancelar reserva adyacente",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{adjacentBookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 Cancelar reserva de reemplazo",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings/{{replacementBookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 Verificar cierre de reservas",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/bookings?roomId={{roomId}}&size=100",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Tres reservas canceladas',()=>{const b=pm.response.json();pm.expect(b.totalElements).to.eql(3);pm.expect(b.content.every(x=>x.status==='CANCELLED')).to.be.true;});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
