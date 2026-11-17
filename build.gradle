@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'org.springframework.boot' version '4.1.2'
 }
 
@@ -35,4 +36,24 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
 }
+
+jacoco { toolVersion = '0.8.13' }
+
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn test
+    violationRules {
+        rule {
+            limit { counter = 'INSTRUCTION'; minimum = 0.80 }
+            limit { counter = 'BRANCH'; minimum = 0.80 }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification

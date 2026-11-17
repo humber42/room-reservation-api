@@ -228,17 +228,21 @@ Para ejecutar la suite completa de pruebas:
 
 En Linux / macOS:
 ```bash
-./gradlew clean test
+./gradlew clean check
 ```
 
 En Windows:
 ```powershell
-.\gradlew.bat clean test
+.\gradlew.bat clean check
 ```
 
 Las pruebas utilizan el perfil `test` (`application-test.yml`), levantando una base de datos H2 en memoria migrada automáticamente por Flyway.
 
-### Casos de prueba cubiertos
+### Estado real de pruebas (2026-11-17)
+
+Suite ejecutada con Java 21 mediante `./gradlew.bat clean check --no-daemon`: **33 pruebas, 0 fallos, 0 errores**. Incluye `SecurityIntegrationTest` (10), `BookingIntegrationTest` (12) y `BusinessUnitTest` (11). JaCoCo: **94,60% instrucciones, 94,44% líneas y 100% ramas**, sin exclusiones de clases. `check` exige al menos 80% de instrucciones y ramas. Reporte HTML: `build/reports/jacoco/test/html/index.html`; XML: `build/reports/jacoco/test/jacocoTestReport.xml`.
+
+### Casos verificados
 - **Pruebas de integración (`MockMvc` + `@SpringBootTest`):**
   - Creación y listado público de salas (`201` con header `Location`, `200`).
   - Capacidad predeterminada a 1 cuando se omite.
@@ -250,9 +254,13 @@ Las pruebas utilizan el perfil `test` (`application-test.yml`), levantando una b
   - Filtro por fecha UTC que intersecta el día civil (incluso si cruza medianoche).
   - Protección perimetral de seguridad: rechazo `401 Unauthorized` ante escrituras sin credenciales y acceso público garantizado en lecturas `GET`.
   - Validación de intervalos temporales inválidos (`400 Bad Request`).
+  - Dos peticiones concurrentes en transacciones independientes: exactamente un `201`, un `409` y una reserva persistida.
 - **Pruebas unitarias de negocio (`JUnit 5` + `Mockito`):**
-  - Validación previa a base de datos de intervalo `startAt >= endAt`.
-  - Validación previa a base de datos de rangos de paginación (`size < 1` o `page < 0`).
+  - Rechazo de tiempos e identificador de sala nulos antes de acceder a persistencia.
+  - Invariantes de dominio, nombres y responsables vacíos, estado inicial y cancelación idempotente.
+  - Orden de acceso al cancelar: resolver sala, bloquear sala, leer reserva y guardar cancelación.
+
+Limitaciones pendientes de revisión: precisión de `Instant` frente a `TIMESTAMP(6)`, unicidad de nombres con distinta capitalización bajo concurrencia y validación de entradas directas a los puertos de aplicación. La cobertura de ramas no demuestra ausencia de estos defectos. Las pruebas concurrentes verifican H2 local; no certifican PostgreSQL ni un despliegue distribuido.
 
 ---
 
@@ -269,13 +277,13 @@ Las pruebas utilizan el perfil `test` (`application-test.yml`), levantando una b
 
 En cumplimiento con las directrices de evaluación de la prueba técnica, se documenta de forma transparente el uso de herramientas de IA durante el desarrollo:
 
-- **Herramientas utilizadas:** Asistente de IA (Antigravity) para pair programming y aceleración de tareas de scaffolding.
+- **Herramientas utilizadas:** Antigravity para scaffolding y Codex para configuración de Spring Security y pruebas de integración de seguridad.
 - **Intervenciones realizadas:**
   - Análisis inicial de compatibilidad de dependencias (detección del requisito de Gradle 8.14+ para Spring Boot 4.1.2).
   - Generación del esqueleto de migraciones Flyway y configuración de Bean Validation.
   - Contraste formal de la condición matemática de solapamiento de intervalos semiabiertos.
   - Estructuración de la suite de pruebas de integración con MockMvc.
-- **Validaciones efectuadas por el desarrollador:**
+- **Validaciones descritas en la documentación inicial (revisión humana no verificada en esta sesión):**
   - Revisión y ajuste manual de la estrategia de bloqueo pesimista (`findByIdForUpdate`) para evitar deadlocks en la cancelación.
   - Verificación del comportamiento del driver H2 con marcas de tiempo UTC.
-  - Ejecución real de compilaciones y pruebas automatizadas (`./gradlew clean test`).
+  - Ejecución real de compilaciones y pruebas automatizadas (`./gradlew clean check`).

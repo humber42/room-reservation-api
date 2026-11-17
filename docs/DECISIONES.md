@@ -26,6 +26,6 @@
 
 **¿Por qué no microservicios/eventos?** El dominio tiene dos recursos y un único límite transaccional local. Separarlo introduciría complejidad distribuida sin necesidad clara.
 
-**¿Cómo probar concurrencia?** Además de tests funcionales secuenciales, prepararía una prueba con dos transacciones/hilos que intentan reservar el mismo horario al mismo tiempo y comprobaría exactamente un 201 y un 409. Para demostrarlo en producción usaría PostgreSQL con Testcontainers.
+**¿Cómo probar concurrencia?** La suite incluye una prueba con dos hilos sincronizados mediante latches y peticiones MockMvc en transacciones independientes. Verifica exactamente un 201, un 409 y una sola reserva persistida en H2. Para demostrarlo en producción usaría PostgreSQL con Testcontainers.
 
 **Limitaciones deliberadas:** no hay gestión multiusuario, roles finos, timezone local configurable, políticas horarias por sala, rate limits ni métricas; están fuera de la consigna.
