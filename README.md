@@ -162,10 +162,32 @@ curl -i -X DELETE http://localhost:8080/api/bookings/1 \
 
 ---
 
-## 6. Decisiones técnicas y justificación
+## 6. Arquitectura Hexagonal y Decisiones Técnicas
+
+El servicio está diseñado bajo los principios de la **Arquitectura Hexagonal (Puertos y Adaptadores)**, desacoplando el núcleo de dominio de cualquier tecnología, base de datos o protocolo de transporte:
+
+```
+com.example.roomreservation/
+├── domain/                                     # Núcleo de Dominio (Puro, sin dependencias de frameworks)
+│   ├── model/                                  # Entidades de dominio (Room, Booking, BookingStatus)
+│   └── exception/                              # Excepciones de negocio (BadRequest, Conflict, NotFound)
+├── application/                                # Capa de Aplicación (Casos de uso y orquestación)
+│   ├── port/
+│   │   ├── in/                                 # Puertos de Entrada (Use Cases: CreateRoom, GetRoom, CreateBooking, etc.)
+│   │   └── out/                                # Puertos de Salida (SPI: RoomRepositoryPort, BookingRepositoryPort)
+│   └── service/                                # Servicios de Aplicación (RoomService, BookingService)
+└── infrastructure/                             # Capa de Infraestructura (Adaptadores y Configuración)
+    ├── adapter/
+    │   ├── in/rest/                            # Adaptador Primario (Controladores REST, DTOs, ApiExceptionHandler)
+    │   └── out/persistence/                    # Adaptador Secundario (Entidades JPA, Spring Data, Persistencia)
+    └── config/                                 # Configuración (SecurityConfig, etc.)
+```
+
+### Justificación de decisiones técnicas
 
 | Decisión | Justificación técnica | Compromisos y alternativas consideradas |
 |---|---|---|
+| **Arquitectura Hexagonal** | Aísla la lógica de negocio en un dominio agnóstico de frameworks. Facilita pruebas unitarias puras sin base de datos ni contexto de Spring y permite intercambiar la persistencia sin alterar el dominio. | Requiere mapeo explícito entre entidades JPA de infraestructura y modelos de dominio. |
 | **Java 21 LTS** | Estándar de la industria con soporte a largo plazo. Permite aprovechar *records* inmutables para DTOs, *pattern matching* y optimizaciones del runtime. | Cumple sobradamente el requisito de Java 17+. |
 | **Spring Boot 4.1.2** | Versión moderna y estable con soporte activo para Java 21, evitando líneas legacy cuyo soporte comunitario ha finalizado. | Requiere Gradle 8.14+ y configuración modularizada `webmvc`. |
 | **Gradle 8.14.3** | Garantiza compilación reproducible y portabilidad absoluta tanto en desarrollo local como en el pipeline de CI. | Wrapper versionado en el repositorio para no depender de instalaciones globales. |
