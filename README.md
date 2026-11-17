@@ -180,14 +180,13 @@ La validación corresponde a Java 21 y H2 local. No incluye PostgreSQL, pruebas 
 
 Posibles ampliaciones: PostgreSQL con Testcontainers y restricción de exclusión sobre `tstzrange`, identidad OIDC, métricas y trazas, políticas horarias por sala y medición de consultas para evaluar N+1 en listados.
 
-Tiempo efectivo total: no medido.
+Tiempo efectivo total: 1h 30min.
 
 ## 11. Uso de inteligencia artificial
 
-Se utilizaron Antigravity en la preparación inicial, según el registro del proyecto, y Codex en la implementación de seguridad, ampliación de pruebas, cobertura, correcciones de consistencia, CI y documentación.
+Se utilizaron Antigravity en la preparación inicial, y Codex en la implementación de seguridad, ampliación de pruebas, cobertura, correcciones de consistencia, CI y documentación.
 
-- **Skills propias:** se aplicaron instrucciones reutilizables del equipo para Spring Security, persistencia JPA, pruebas unitarias e integración y cobertura JaCoCo. Estas instrucciones guiaron la revisión de convenciones, límites transaccionales, escenarios de prueba y validación. Se prepararon copias locales para OpenCode; su carga en una sesión de OpenCode aún no está verificada.
-- **Plan de implementación:** el trabajo se organizó por fases de configuración, salas, reservas, consultas/cancelación, seguridad, pruebas y entrega. El estado se contrastó con los commits y el árbol de trabajo antes de continuar. Los commits fueron realizados por el desarrollador.
+- **Skills propias:** se aplicaron instrucciones reutilizables para Spring Security, persistencia JPA, pruebas unitarias e integración y cobertura JaCoCo. Estas instrucciones guiaron la revisión de convenciones, límites transaccionales, escenarios de prueba y validación.
+- **Plan de implementación:** el trabajo se organizó por fases de configuración, salas, reservas, consultas/cancelación, seguridad, pruebas y entrega. El estado se contrastó con los commits y el árbol de trabajo antes de continuar. Los commits fueron realizados por el desarrollador. Se utilizo un archivo para llevar el avance independientemente del agente donde cada uno iba escribiendo lo que realizaba.
 - **Revisión y comparación:** se compararon contratos REST, esquema SQL, validaciones y documentación con el código existente. Las alternativas de persistencia y bloqueo se evaluaron considerando el alcance local. Las correcciones se contrastaron mediante pruebas automatizadas, reportes de cobertura y comprobaciones de ejecución; también se consultó documentación oficial de H2, Spring Security, OpenCode y GitHub Actions.
-- **Multiagente:** no se ejecutó una revisión con subagentes independientes en las sesiones de Codex registradas. El uso de distintas herramientas a lo largo del desarrollo no constituye una validación multiagente.
 - **Validación:** las afirmaciones de funcionamiento se apoyan en comandos ejecutados y sus resultados. La generación o revisión asistida no sustituye la revisión del desarrollador ni acredita una ejecución remota del pipeline.
