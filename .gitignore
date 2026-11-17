@@ -1,0 +1,12 @@
+.gradle/
+build/
+out/
+.idea/
+.vscode/
+*.iml
+*.log
+/data/
+*.h2.db
+*.mv.db
+.env
+.DS_Store
