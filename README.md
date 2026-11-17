@@ -1,6 +1,6 @@
 # Room Reservation API
 
-API REST empresarial para la gestión y reserva de salas de reuniones, desarrollada con **Java 21**, **Spring Boot 4.1.2** y **Gradle 8.14.3**.
+API REST de demostración para la gestión y reserva de salas de reuniones, desarrollada con **Java 21**, **Spring Boot 4.1.2** y **Gradle 8.14.3**.
 
 ---
 
@@ -202,7 +202,7 @@ com.example.roomreservation/
 
 ## 7. Formato de errores (RFC 9457 - Problem Details)
 
-Todos los errores controlados devuelven `application/problem+json`:
+Los errores de aplicación 400, 404 y 409 devuelven `application/problem+json`. Los errores de seguridad 401/403 usan la respuesta de Spring Security:
 
 - **HTTP 400 (Bad Request):** JSON mal formado, campos obligatorios omitidos, intervalo `startAt >= endAt` o parámetros de paginación inválidos.
   ```json
@@ -277,7 +277,7 @@ Limitaciones pendientes de revisión: precisión de `Instant` frente a `TIMESTAM
 
 En cumplimiento con las directrices de evaluación de la prueba técnica, se documenta de forma transparente el uso de herramientas de IA durante el desarrollo:
 
-- **Herramientas utilizadas:** Antigravity para scaffolding y Codex para configuración de Spring Security y pruebas de integración de seguridad.
+- **Herramientas utilizadas:** Antigravity para scaffolding y Codex para Spring Security, pruebas unitarias y de integración, JaCoCo, workflow de CI y actualización documental.
 - **Intervenciones realizadas:**
   - Análisis inicial de compatibilidad de dependencias (detección del requisito de Gradle 8.14+ para Spring Boot 4.1.2).
   - Generación del esqueleto de migraciones Flyway y configuración de Bean Validation.
@@ -287,3 +287,38 @@ En cumplimiento con las directrices de evaluación de la prueba técnica, se doc
   - Revisión y ajuste manual de la estrategia de bloqueo pesimista (`findByIdForUpdate`) para evitar deadlocks en la cancelación.
   - Verificación del comportamiento del driver H2 con marcas de tiempo UTC.
   - Ejecución real de compilaciones y pruebas automatizadas (`./gradlew clean check`).
+
+## 11. Integración continua y ejecución del JAR
+
+El workflow `.github/workflows/ci.yml` se ejecuta en pushes, pull requests y manualmente. Usa Ubuntu, Temurin Java 21 y el wrapper Gradle 8.14.3. Ejecuta:
+
+```bash
+bash ./gradlew clean check bootJar --no-daemon
+```
+
+`check` falla si hay pruebas fallidas o si instrucciones/ramas quedan por debajo del 80%. Se conservan los reportes de pruebas y JaCoCo durante 14 días incluso cuando falla la verificación; el JAR solo se publica como artefacto si el trabajo es satisfactorio. No despliega la aplicación. El wrapper se invoca mediante `bash` porque su modo Git actual no incluye permiso de ejecución. `.gitattributes` conserva LF para el script Unix.
+
+Para generar y ejecutar el paquete localmente con Java 21:
+
+```powershell
+.\gradlew.bat clean check bootJar --no-daemon
+java -jar build/libs/room-reservation-api-1.0.0.jar
+```
+
+En Linux/macOS se puede usar `bash ./gradlew` para los mismos comandos. Las credenciales se configuran con `BOOKING_BASIC_USER` y `BOOKING_BASIC_PASSWORD`, como se explica en la sección 2. Las credenciales incluidas son exclusivamente de demostración local. HTTP Basic requiere TLS cuando se usa fuera de localhost.
+
+**Estado de CI:** workflow preparado; ejecución remota pendiente. El repositorio local no tiene remoto configurado al momento de esta validación. No se declara un pipeline verde ni una publicación completada.
+
+## 12. Alcance y limitaciones de la entrega
+
+La evidencia disponible corresponde a Java 21 y H2 local. No incluye despliegue, validación en PostgreSQL ni carga sostenida en varias instancias.
+
+- **Precisión temporal:** el contrato recibe `Instant` y el esquema usa `TIMESTAMP(6)`. Los intervalos inferiores a un microsegundo y el redondeo en los límites requieren una política y pruebas adicionales; utilizar precisión de microsegundos o menor en esta demostración.
+- **Nombres de sala:** el chequeo de aplicación ignora mayúsculas, pero `UNIQUE(name)` no expresa esa misma normalización. No se garantiza unicidad insensible a mayúsculas para altas simultáneas. Se requiere una migración y prueba específica antes de afirmar esa garantía.
+- **Entradas internas:** los DTO REST validan las entradas; no todos los parámetros inválidos recibidos directamente por los puertos de aplicación tienen una traducción uniforme a excepciones de negocio. Por ejemplo, un responsable nulo alcanza `strip()`.
+- **Consultas:** no se ha medido el número de consultas al mapear relaciones LAZY en listados; no se acredita una optimización N+1.
+- **Errores:** Problem Details está verificado para 400/404/409. Los errores de autenticación y autorización 401/403 provienen de Spring Security y no se prometen como Problem Details.
+
+Estas limitaciones están abiertas y no quedan resueltas por el porcentaje de cobertura. La entrega es una prueba técnica local, no una certificación de preparación para producción.
+
+**Tiempo efectivo total:** no medido. No se infiere a partir de commits, timestamps ni duración de los comandos.
