@@ -2,7 +2,7 @@
 
 **¿Por qué H2 y no PostgreSQL?** Ambos son válidos para la consigna; H2 elimina una dependencia operativa y permite ejecutar la prueba rápidamente. Se usa H2 persistente en la app y en memoria en tests, ambos con Flyway. Para un despliegue productivo migraría a PostgreSQL y Testcontainers; no presupongo compatibilidad SQL total sin validación.
 
-**¿Por qué Spring Boot 4.1.2?** Es una versión estable con soporte activo y compatible con Java 21. Evita comenzar en la línea 3.5, cuyo soporte OSS finalizó, sin necesidad de versiones preliminares.
+**¿Por qué Spring Boot 4.1.2?** Es la versión fijada en el proyecto y validada localmente con Java 21 y Gradle 8.14.3. No se modificaron las versiones del stack durante estas correcciones.
 
 **¿Por qué HTTP Basic y no JWT?** La prueba permite ambos. Con un único editor de prueba, Basic + TLS ofrece protección de escritura sin construir endpoints de login, firma, refresh token ni servidor de autorización. En una solución real usaría un proveedor de identidad y permisos por usuario.
 
@@ -29,3 +29,8 @@
 **¿Cómo probar concurrencia?** La suite incluye una prueba con dos hilos sincronizados mediante latches y peticiones MockMvc en transacciones independientes. Verifica exactamente un 201, un 409 y una sola reserva persistida en H2. Para demostrarlo en producción usaría PostgreSQL con Testcontainers.
 
 **Limitaciones deliberadas:** no hay gestión multiusuario, roles finos, timezone local configurable, políticas horarias por sala, rate limits ni métricas; están fuera de la consigna.
+
+
+**¿Cómo se preserva la precisión temporal?** La aplicación rechaza valores con precisión superior a microsegundos mediante BadRequestException (400 por REST), antes de consultar disponibilidad. No redondea ni trunca los instantes. El esquema TIMESTAMP(6) puede representar exactamente los valores admitidos.
+
+**¿Cómo se evita duplicar salas con distinta capitalización?** V2 agrega una columna generada UPPER(name) y una restricción única. El chequeo previo facilita el error de negocio; la restricción protege las inserciones concurrentes. Una base anterior con duplicados debe corregirse antes de migrar; no se eliminan datos automáticamente.

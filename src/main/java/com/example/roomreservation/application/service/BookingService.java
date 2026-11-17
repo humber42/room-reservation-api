@@ -43,6 +43,18 @@ public class BookingService implements CreateBookingUseCase, GetBookingUseCase, 
         if (!startAt.isBefore(endAt)) {
             throw new BadRequestException("endAt must be later than startAt");
         }
+        if (startAt.getNano() % 1000 != 0 || endAt.getNano() % 1000 != 0) {
+            throw new BadRequestException("timestamps must use microsecond precision or coarser");
+        }
+        if (responsible == null || responsible.strip().isBlank()) {
+            throw new BadRequestException("responsible is required");
+        }
+        if (responsible.length() > 120) {
+            throw new BadRequestException("responsible must not exceed 120 characters");
+        }
+        if (roomId != null && roomId <= 0) {
+            throw new BadRequestException("roomId must be positive");
+        }
         if (roomId == null) {
             throw new BadRequestException("roomId is required");
         }
@@ -63,6 +75,7 @@ public class BookingService implements CreateBookingUseCase, GetBookingUseCase, 
     @Override
     @Transactional(readOnly = true)
     public Booking getBookingById(Long id) {
+        validateId(id);
         return bookingRepositoryPort.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + id));
     }
@@ -104,11 +117,13 @@ public class BookingService implements CreateBookingUseCase, GetBookingUseCase, 
     @Override
     @Transactional
     public void cancelBooking(Long id) {
+        validateId(id);
         // Orden anti-deadlock: resolver ID de sala primero sin lock, luego adquirir lock de sala
         Long roomId = bookingRepositoryPort.findRoomIdByBookingId(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + id));
 
-        roomRepositoryPort.findByIdForUpdate(roomId);
+        roomRepositoryPort.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Room not found: " + roomId));
 
         Booking booking = bookingRepositoryPort.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + id));
@@ -117,6 +132,12 @@ public class BookingService implements CreateBookingUseCase, GetBookingUseCase, 
         if (booking.getStatus() == BookingStatus.ACTIVE) {
             booking.cancel();
             bookingRepositoryPort.save(booking);
+        }
+    }
+
+    private void validateId(Long id) {
+        if (id == null || id <= 0) {
+            throw new BadRequestException("id must be positive");
         }
     }
 }

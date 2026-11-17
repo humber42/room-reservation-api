@@ -1,324 +1,193 @@
 # Room Reservation API
 
-API REST de demostración para la gestión y reserva de salas de reuniones, desarrollada con **Java 21**, **Spring Boot 4.1.2** y **Gradle 8.14.3**.
+API REST para crear salas, consultar disponibilidad mediante reservas, registrar reservas y cancelarlas. Implementada con Java 21, Spring Boot 4.1.2, Gradle 8.14.3, H2 y Flyway.
 
----
+## 1. Ejecución
 
-## 1. Requisitos previos
+Requiere JDK 21. El repositorio incluye Gradle Wrapper; no requiere Gradle global ni una base de datos externa.
 
-- **JDK 21 LTS** instalado (verificar con `java -version`).
-- No se requiere la instalación de bases de datos externas ni Docker; la aplicación utiliza **H2** embebido con persistencia en archivo y esquema gestionado por **Flyway**.
-- El proyecto incluye el wrapper oficial de Gradle (`gradlew` y `gradlew.bat`), por lo que no es necesario instalar Gradle previamente.
-
----
-
-## 2. Cómo arrancar el proyecto
-
-### 2.1 Ejecución en entorno local
-
-Desde la raíz del proyecto:
-
-En Linux / macOS:
-```bash
-./gradlew bootRun
-```
-
-En Windows (PowerShell / CMD):
 ```powershell
+# Windows / PowerShell
 .\gradlew.bat bootRun
 ```
 
-La API quedará disponible en `http://localhost:8080`.
-
-Al arrancar:
-1. **Flyway** crea y valida automáticamente el esquema relacional (`rooms` y `bookings`) a partir de las migraciones SQL.
-2. La base de datos H2 se persiste localmente en `./data/meetingrooms.mv.db` (este directorio está excluido en `.gitignore` para no versionar datos de ejecución).
-3. Hibernate está configurado con `ddl-auto: validate` para garantizar que la estructura física de la base de datos pertenece exclusivamente a Flyway.
-
-### 2.2 Credenciales de autenticación (HTTP Basic)
-
-Las operaciones de modificación (`POST` y `DELETE`) están protegidas mediante HTTP Basic. Para desarrollo local se incluyen credenciales por defecto:
-
-- **Usuario:** `admin`
-- **Contraseña:** `dev-only-change-me`
-
-Para configurar credenciales personalizadas mediante variables de entorno:
-
-En Linux / macOS:
 ```bash
-export BOOKING_BASIC_USER=mi_usuario
-export BOOKING_BASIC_PASSWORD=mi_clave_segura
-./gradlew bootRun
+# Linux / macOS
+bash ./gradlew bootRun
 ```
 
-En Windows (PowerShell):
-```powershell
-$env:BOOKING_BASIC_USER = 'mi_usuario'
-$env:BOOKING_BASIC_PASSWORD = 'mi_clave_segura'
-.\gradlew.bat bootRun
-```
+La API escucha en `http://localhost:8080`. H2 persiste datos en `./data/meetingrooms.mv.db`. Flyway administra las migraciones y Hibernate valida el esquema con `ddl-auto: validate`. `open-in-view` está deshabilitado.
 
----
-
-## 3. Endpoints de la API REST
-
-| Método | Ruta | Autenticación | Códigos HTTP | Descripción |
-|---|---|---|---|---|
-| `POST` | `/api/rooms` | HTTP Basic | `201`, `400`, `401`, `409` | Crea una sala. Devuelve header `Location` y el recurso creado. |
-| `GET` | `/api/rooms` | Pública | `200` | Lista todas las salas ordenadas alfabéticamente por nombre. |
-| `GET` | `/api/rooms/{id}` | Pública | `200`, `404` | Obtiene el detalle de una sala por ID. |
-| `POST` | `/api/bookings` | HTTP Basic | `201`, `400`, `401`, `404`, `409` | Crea una reserva de sala. Valida solapamiento bajo bloqueo pesimista. |
-| `GET` | `/api/bookings` | Pública | `200`, `400` | Consulta paginada y filtrable por `roomId` y `date` (UTC). |
-| `GET` | `/api/bookings/{id}` | Pública | `200`, `404` | Obtiene el detalle de una reserva por ID. |
-| `DELETE` | `/api/bookings/{id}` | HTTP Basic | `204`, `401`, `404` | Cancela lógicamente una reserva (idempotente). |
-
----
-
-## 4. Ejemplos de uso con cURL
-
-### 4.1 Crear una sala
-El campo `name` es obligatorio y único; `capacity` es opcional (valor predeterminado: `1`).
-
-```bash
-curl -i -X POST http://localhost:8080/api/rooms \
-  -u admin:dev-only-change-me \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Sala Innovación", "capacity": 10}'
-```
-*Respuesta:* `201 Created` con cabecera `Location: /api/rooms/1`.
-
-### 4.2 Listar salas (Público)
-```bash
-curl -i http://localhost:8080/api/rooms
-```
-
-### 4.3 Crear una reserva
-Las marcas de tiempo deben enviarse en formato ISO-8601 con zona horaria o sufijo `Z` (UTC).
-
-```bash
-curl -i -X POST http://localhost:8080/api/bookings \
-  -u admin:dev-only-change-me \
-  -H "Content-Type: application/json" \
-  -d '{
-    "roomId": 1,
-    "responsible": "Carlos Pérez",
-    "startAt": "2026-12-01T09:00:00Z",
-    "endAt": "2026-12-01T10:30:00Z"
-  }'
-```
-*Respuesta:* `201 Created` con cabecera `Location: /api/bookings/1`.
-
-### 4.4 Intento de reserva solapada (Conflicto 409)
-Si se intenta reservar la misma sala en un horario que se cruce con una reserva activa:
-
-```bash
-curl -i -X POST http://localhost:8080/api/bookings \
-  -u admin:dev-only-change-me \
-  -H "Content-Type: application/json" \
-  -d '{
-    "roomId": 1,
-    "responsible": "Lucía Gómez",
-    "startAt": "2026-12-01T10:00:00Z",
-    "endAt": "2026-12-01T11:00:00Z"
-  }'
-```
-*Respuesta:* `409 Conflict` (Problem Details explicando que el horario ya está ocupado).
-
-### 4.5 Consultar reservas con filtros y paginación (Público)
-Parámetros opcionales soportados:
-- `roomId`: ID de la sala.
-- `date`: Día civil UTC en formato `YYYY-MM-DD` (incluye reservas que intersecten ese día).
-- `page`: Número de página (base 0, por defecto: `0`).
-- `size`: Tamaño de página (entre `1` y `100`, por defecto: `20`).
-
-```bash
-curl -i "http://localhost:8080/api/bookings?roomId=1&date=2026-12-01&page=0&size=10"
-```
-
-### 4.6 Cancelar una reserva
-```bash
-curl -i -X DELETE http://localhost:8080/api/bookings/1 \
-  -u admin:dev-only-change-me
-```
-*Respuesta:* `204 No Content`. La llamada es **idempotente**: repetir el `DELETE` sobre la misma reserva cancelada vuelve a responder `204 No Content`.
-
----
-
-## 5. Reglas de negocio y concurrencia
-
-1. **Intervalos semiabiertos $[startAt, endAt)$:**  
-   El instante final es exclusivo. Si una reserva finaliza a las `10:00:00Z`, otra reserva en la misma sala puede iniciar exactamente a las `10:00:00Z` sin considerarse solapada.
-2. **Detección de solapamiento:**  
-   Dos reservas activas para la misma sala se intersectan si y solo si:  
-   `existing.startAt < requested.endAt && existing.endAt > requested.startAt`.
-3. **Bloqueo pesimista sobre la sala (`PESSIMISTIC_WRITE`):**  
-   Para evitar la condición de carrera *Time-of-Check to Time-of-Use* (dos hilos concurrentes que comprueban disponibilidad simultáneamente y ambos insertan), la transacción adquiere primero un bloqueo pesimista sobre la fila de la sala (`SELECT ... FOR UPDATE` en `Room`). El bloqueo serializa las operaciones competidoras sobre la misma sala física hasta el `commit` de la transacción.
-4. **Prevención de interbloqueos (*deadlocks*):**  
-   Tanto en la creación como en la cancelación, se sigue estrictamente el **mismo orden de bloqueo**:
-   - En `BookingService.create`: se bloquea primero `Room` y luego se inserta `Booking`.
-   - En `BookingService.cancel`: primero se obtiene el ID de la sala sin lock, luego se adquiere el bloqueo sobre `Room`, y finalmente se actualiza el estado de `Booking`.
-5. **Cancelación lógica:**  
-   La cancelación no elimina físicamente la fila, sino que actualiza su estado a `CANCELLED`, liberando el horario para futuras reservas y conservando la trazabilidad de auditoría.
-
----
-
-## 6. Arquitectura Hexagonal y Decisiones Técnicas
-
-El servicio está diseñado bajo los principios de la **Arquitectura Hexagonal (Puertos y Adaptadores)**, desacoplando el núcleo de dominio de cualquier tecnología, base de datos o protocolo de transporte:
-
-```
-com.example.roomreservation/
-├── domain/                                     # Núcleo de Dominio (Puro, sin dependencias de frameworks)
-│   ├── model/                                  # Entidades de dominio (Room, Booking, BookingStatus)
-│   └── exception/                              # Excepciones de negocio (BadRequest, Conflict, NotFound)
-├── application/                                # Capa de Aplicación (Casos de uso y orquestación)
-│   ├── port/
-│   │   ├── in/                                 # Puertos de Entrada (Use Cases: CreateRoom, GetRoom, CreateBooking, etc.)
-│   │   └── out/                                # Puertos de Salida (SPI: RoomRepositoryPort, BookingRepositoryPort)
-│   └── service/                                # Servicios de Aplicación (RoomService, BookingService)
-└── infrastructure/                             # Capa de Infraestructura (Adaptadores y Configuración)
-    ├── adapter/
-    │   ├── in/rest/                            # Adaptador Primario (Controladores REST, DTOs, ApiExceptionHandler)
-    │   └── out/persistence/                    # Adaptador Secundario (Entidades JPA, Spring Data, Persistencia)
-    └── config/                                 # Configuración (SecurityConfig, etc.)
-```
-
-### Justificación de decisiones técnicas
-
-| Decisión | Justificación técnica | Compromisos y alternativas consideradas |
-|---|---|---|
-| **Arquitectura Hexagonal** | Aísla la lógica de negocio en un dominio agnóstico de frameworks. Facilita pruebas unitarias puras sin base de datos ni contexto de Spring y permite intercambiar la persistencia sin alterar el dominio. | Requiere mapeo explícito entre entidades JPA de infraestructura y modelos de dominio. |
-| **Java 21 LTS** | Estándar de la industria con soporte a largo plazo. Permite aprovechar *records* inmutables para DTOs, *pattern matching* y optimizaciones del runtime. | Cumple sobradamente el requisito de Java 17+. |
-| **Spring Boot 4.1.2** | Versión moderna y estable con soporte activo para Java 21, evitando líneas legacy cuyo soporte comunitario ha finalizado. | Requiere Gradle 8.14+ y configuración modularizada `webmvc`. |
-| **Gradle 8.14.3** | Garantiza compilación reproducible y portabilidad absoluta tanto en desarrollo local como en el pipeline de CI. | Wrapper versionado en el repositorio para no depender de instalaciones globales. |
-| **H2 con persistencia en archivo** | Elimina la dependencia operativa de desplegar contenedores externos para ejecutar y evaluar la prueba rápidamente. Persistir en archivo (`meetingrooms.mv.db`) permite conservar datos entre reinicios. | Para un entorno productivo de alta concurrencia se migraría a PostgreSQL con Testcontainers. |
-| **Flyway para migraciones** | Esquema gobernado por código versionado en SQL (`V1__create_rooms_and_bookings.sql`). Al combinarlo con `ddl-auto: validate`, se prohíbe que Hibernate altere tablas en caliente. | Elimina discrepancias entre entornos y errores de generación automática de DDL. |
-| **HTTP Basic stateless** | Cumple con la exigencia de proteger endpoints de mutación con la menor sobrecarga operativa y cognitiva. No requiere construir endpoints de login, almacenamiento de refresh tokens ni servidores de identidad. | En producción se utilizaría un proveedor de identidad (OIDC/Keycloak/Auth0) con tokens JWT y roles granulares. |
-| **Bloqueo pesimista a nivel de Sala** | Bloquear la fila de la sala garantiza exclusión mutua transaccional incluso si la sala aún no tiene ninguna reserva previa registrada (caso donde no existen filas de reserva para bloquear). | Evita mecanismos en memoria (`synchronized`) que fallarían al escalar a múltiples instancias de la aplicación. |
-| **`Instant` (UTC)** | Almacena y calcula marcas temporales absolutas independientes de la zona horaria del servidor o del cliente, previniendo discrepancias por horario de verano. | La conversión a zona local queda como responsabilidad de la interfaz cliente. |
-| **Problem Details (RFC 9457)** | Estandariza las respuestas de error en formato `application/problem+json`, estructurando detalles de validación de campos sin exponer stack traces internos. | Proporciona una experiencia de depuración profesional y predecible a los consumidores de la API. |
-
----
-
-## 7. Formato de errores (RFC 9457 - Problem Details)
-
-Los errores de aplicación 400, 404 y 409 devuelven `application/problem+json`. Los errores de seguridad 401/403 usan la respuesta de Spring Security:
-
-- **HTTP 400 (Bad Request):** JSON mal formado, campos obligatorios omitidos, intervalo `startAt >= endAt` o parámetros de paginación inválidos.
-  ```json
-  {
-    "type": "about:blank",
-    "title": "Validation error",
-    "status": 400,
-    "detail": "One or more request fields are invalid",
-    "violations": [
-      {"field": "name", "message": "name is required"}
-    ]
-  }
-  ```
-- **HTTP 401 (Unauthorized):** Petición de escritura (`POST` o `DELETE`) sin credenciales o con credenciales erróneas.
-- **HTTP 404 (Not Found):** Sala o reserva inexistente.
-- **HTTP 409 (Conflict):** Solapamiento de reserva con una existente o intento de duplicar el nombre de una sala.
-
----
-
-## 8. Pruebas automatizadas
-
-Para ejecutar la suite completa de pruebas:
-
-En Linux / macOS:
-```bash
-./gradlew clean check
-```
-
-En Windows:
-```powershell
-.\gradlew.bat clean check
-```
-
-Las pruebas utilizan el perfil `test` (`application-test.yml`), levantando una base de datos H2 en memoria migrada automáticamente por Flyway.
-
-### Estado real de pruebas (2026-11-17)
-
-Suite ejecutada con Java 21 mediante `./gradlew.bat clean check --no-daemon`: **33 pruebas, 0 fallos, 0 errores**. Incluye `SecurityIntegrationTest` (10), `BookingIntegrationTest` (12) y `BusinessUnitTest` (11). JaCoCo: **94,60% instrucciones, 94,44% líneas y 100% ramas**, sin exclusiones de clases. `check` exige al menos 80% de instrucciones y ramas. Reporte HTML: `build/reports/jacoco/test/html/index.html`; XML: `build/reports/jacoco/test/jacocoTestReport.xml`.
-
-### Casos verificados
-- **Pruebas de integración (`MockMvc` + `@SpringBootTest`):**
-  - Creación y listado público de salas (`201` con header `Location`, `200`).
-  - Capacidad predeterminada a 1 cuando se omite.
-  - Rechazo de nombres de sala duplicados (`409 Conflict`).
-  - Detección y bloqueo de reservas solapadas (`409 Conflict`).
-  - Aceptación de reservas contiguas (adyacentes exactas `10:00-11:00` y `11:00-12:00`).
-  - Cancelación lógica, idempotencia (`204`) y liberación inmediata del horario.
-  - Paginación y ordenamiento estable (`startAt ASC, id ASC`).
-  - Filtro por fecha UTC que intersecta el día civil (incluso si cruza medianoche).
-  - Protección perimetral de seguridad: rechazo `401 Unauthorized` ante escrituras sin credenciales y acceso público garantizado en lecturas `GET`.
-  - Validación de intervalos temporales inválidos (`400 Bad Request`).
-  - Dos peticiones concurrentes en transacciones independientes: exactamente un `201`, un `409` y una reserva persistida.
-- **Pruebas unitarias de negocio (`JUnit 5` + `Mockito`):**
-  - Rechazo de tiempos e identificador de sala nulos antes de acceder a persistencia.
-  - Invariantes de dominio, nombres y responsables vacíos, estado inicial y cancelación idempotente.
-  - Orden de acceso al cancelar: resolver sala, bloquear sala, leer reserva y guardar cancelación.
-
-Limitaciones pendientes de revisión: precisión de `Instant` frente a `TIMESTAMP(6)`, unicidad de nombres con distinta capitalización bajo concurrencia y validación de entradas directas a los puertos de aplicación. La cobertura de ramas no demuestra ausencia de estos defectos. Las pruebas concurrentes verifican H2 local; no certifican PostgreSQL ni un despliegue distribuido.
-
----
-
-## 9. Qué mejoraría con más tiempo
-
-1. **Migración a PostgreSQL y Testcontainers:** Reemplazar H2 en las pruebas de integración por contenedores reales de PostgreSQL mediante Testcontainers, implementando una restricción de exclusión a nivel de motor relacional (`EXCLUDE USING gist (room_id WITH =, tsrange(start_at, end_at) WITH &&) WHERE (status = 'ACTIVE')`).
-2. **Gestión de identidades y roles:** Migrar de HTTP Basic a OAuth2/OIDC con JWT (roles de Administrador, Gestor de Sala y Usuario final).
-3. **Observabilidad:** Integrar Spring Boot Actuator, Micrometer y OpenTelemetry para métricas de latencia de endpoints, conteo de conflictos de reserva y trazas distribuidas.
-4. **Políticas horarias:** Añadir configuración por sala de horario hábil permitido (ej. 08:00 a 20:00) y duración mínima/máxima de reserva.
-
----
-
-## 10. Uso de herramientas de inteligencia artificial
-
-En cumplimiento con las directrices de evaluación de la prueba técnica, se documenta de forma transparente el uso de herramientas de IA durante el desarrollo:
-
-- **Herramientas utilizadas:** Antigravity para scaffolding y Codex para Spring Security, pruebas unitarias y de integración, JaCoCo, workflow de CI y actualización documental.
-- **Intervenciones realizadas:**
-  - Análisis inicial de compatibilidad de dependencias (detección del requisito de Gradle 8.14+ para Spring Boot 4.1.2).
-  - Generación del esqueleto de migraciones Flyway y configuración de Bean Validation.
-  - Contraste formal de la condición matemática de solapamiento de intervalos semiabiertos.
-  - Estructuración de la suite de pruebas de integración con MockMvc.
-- **Validaciones descritas en la documentación inicial (revisión humana no verificada en esta sesión):**
-  - Revisión y ajuste manual de la estrategia de bloqueo pesimista (`findByIdForUpdate`) para evitar deadlocks en la cancelación.
-  - Verificación del comportamiento del driver H2 con marcas de tiempo UTC.
-  - Ejecución real de compilaciones y pruebas automatizadas (`./gradlew clean check`).
-
-## 11. Integración continua y ejecución del JAR
-
-El workflow `.github/workflows/ci.yml` se ejecuta en pushes, pull requests y manualmente. Usa Ubuntu, Temurin Java 21 y el wrapper Gradle 8.14.3. Ejecuta:
-
-```bash
-bash ./gradlew clean check bootJar --no-daemon
-```
-
-`check` falla si hay pruebas fallidas o si instrucciones/ramas quedan por debajo del 80%. Se conservan los reportes de pruebas y JaCoCo durante 14 días incluso cuando falla la verificación; el JAR solo se publica como artefacto si el trabajo es satisfactorio. No despliega la aplicación. El wrapper se invoca mediante `bash` porque su modo Git actual no incluye permiso de ejecución. `.gitattributes` conserva LF para el script Unix.
-
-Para generar y ejecutar el paquete localmente con Java 21:
+Para generar y ejecutar el JAR:
 
 ```powershell
 .\gradlew.bat clean check bootJar --no-daemon
 java -jar build/libs/room-reservation-api-1.0.0.jar
 ```
 
-En Linux/macOS se puede usar `bash ./gradlew` para los mismos comandos. Las credenciales se configuran con `BOOKING_BASIC_USER` y `BOOKING_BASIC_PASSWORD`, como se explica en la sección 2. Las credenciales incluidas son exclusivamente de demostración local. HTTP Basic requiere TLS cuando se usa fuera de localhost.
+En Linux/macOS, sustituir `.\gradlew.bat` por `bash ./gradlew`.
 
-**Estado de CI:** workflow preparado; ejecución remota pendiente. El repositorio local no tiene remoto configurado al momento de esta validación. No se declara un pipeline verde ni una publicación completada.
+## 2. Autenticación
 
-## 12. Alcance y limitaciones de la entrega
+Los GET son públicos. POST y DELETE requieren HTTP Basic. La configuración es stateless, usa BCrypt para el usuario en memoria y deshabilita CSRF. Las rutas y métodos no declarados están denegados.
 
-La evidencia disponible corresponde a Java 21 y H2 local. No incluye despliegue, validación en PostgreSQL ni carga sostenida en varias instancias.
+Credenciales de demostración local: `admin` / `dev-only-change-me`. Se pueden sustituir mediante variables de entorno:
 
-- **Precisión temporal:** el contrato recibe `Instant` y el esquema usa `TIMESTAMP(6)`. Los intervalos inferiores a un microsegundo y el redondeo en los límites requieren una política y pruebas adicionales; utilizar precisión de microsegundos o menor en esta demostración.
-- **Nombres de sala:** el chequeo de aplicación ignora mayúsculas, pero `UNIQUE(name)` no expresa esa misma normalización. No se garantiza unicidad insensible a mayúsculas para altas simultáneas. Se requiere una migración y prueba específica antes de afirmar esa garantía.
-- **Entradas internas:** los DTO REST validan las entradas; no todos los parámetros inválidos recibidos directamente por los puertos de aplicación tienen una traducción uniforme a excepciones de negocio. Por ejemplo, un responsable nulo alcanza `strip()`.
-- **Consultas:** no se ha medido el número de consultas al mapear relaciones LAZY en listados; no se acredita una optimización N+1.
-- **Errores:** Problem Details está verificado para 400/404/409. Los errores de autenticación y autorización 401/403 provienen de Spring Security y no se prometen como Problem Details.
+```powershell
+$env:BOOKING_BASIC_USER = 'editor'
+$env:BOOKING_BASIC_PASSWORD = '<contraseña>'
+.\gradlew.bat bootRun
+```
 
-Estas limitaciones están abiertas y no quedan resueltas por el porcentaje de cobertura. La entrega es una prueba técnica local, no una certificación de preparación para producción.
+Usar TLS para HTTP Basic fuera de localhost. El servicio no implementa registro de usuarios ni emisión de tokens.
 
-**Tiempo efectivo total:** no medido. No se infiere a partir de commits, timestamps ni duración de los comandos.
+## 3. Contrato REST
+
+| Método | Ruta | Acceso | Respuestas |
+|---|---|---|---|
+| POST | `/api/rooms` | Autenticado | 201, 400, 401, 409 |
+| GET | `/api/rooms` | Público | 200 |
+| GET | `/api/rooms/{id}` | Público | 200, 400, 404 |
+| POST | `/api/bookings` | Autenticado | 201, 400, 401, 404, 409 |
+| GET | `/api/bookings` | Público | 200, 400 |
+| GET | `/api/bookings/{id}` | Público | 200, 400, 404 |
+| DELETE | `/api/bookings/{id}` | Autenticado | 204, 400, 401, 404 |
+
+Los POST devuelven el recurso creado y una cabecera `Location`.
+
+### Salas
+
+`name` es obligatorio, admite hasta 100 caracteres y se guarda sin espacios en los extremos. La unicidad ignora mayúsculas según `UPPER` de H2. `capacity` admite valores de 1 a 1000; si se omite, se utiliza 1. El listado se ordena por nombre.
+
+```bash
+curl -i -u admin:dev-only-change-me -H 'Content-Type: application/json' \
+  -d '{"name":"Sala Norte","capacity":10}' http://localhost:8080/api/rooms
+```
+
+### Reservas
+
+`roomId` debe ser positivo y corresponder a una sala existente. `responsible` es obligatorio y admite hasta 120 caracteres. Las marcas temporales se reciben como `Instant` ISO-8601, con zona u offset, y se comparan en UTC.
+
+La precisión admitida es de microsegundos: los nanosegundos deben ser múltiplos de 1000. Una precisión mayor devuelve 400; no se truncan ni redondean entradas. Se exige `startAt < endAt`. Se permiten fechas históricas.
+
+```bash
+curl -i -u admin:dev-only-change-me -H 'Content-Type: application/json' \
+  -d '{"roomId":1,"responsible":"Ana","startAt":"2026-12-01T10:00:00Z","endAt":"2026-12-01T11:00:00Z"}' \
+  http://localhost:8080/api/bookings
+```
+
+Consulta:
+
+```bash
+curl 'http://localhost:8080/api/bookings?roomId=1&date=2026-12-01&page=0&size=20'
+```
+
+- `roomId`: filtro opcional por sala.
+- `date`: día UTC en formato `YYYY-MM-DD`; incluye reservas que intersectan ese día.
+- `page`: página desde 0; valor predeterminado 0.
+- `size`: entre 1 y 100; valor predeterminado 20.
+- Orden: `startAt ASC, id ASC`.
+- Respuesta: `content`, `page`, `size`, `totalElements`, `totalPages`.
+- La consulta incluye reservas activas y canceladas.
+
+Cancelación:
+
+```bash
+curl -i -X DELETE -u admin:dev-only-change-me http://localhost:8080/api/bookings/1
+```
+
+La cancelación cambia el estado a `CANCELLED`, conserva la fila y libera el horario. Repetir la cancelación de una reserva existente devuelve 204.
+
+## 4. Consistencia y concurrencia
+
+Los intervalos son semiabiertos `[startAt, endAt)`. Dos reservas adyacentes no se solapan. El conflicto se comprueba únicamente contra reservas `ACTIVE`:
+
+```text
+existing.startAt < requested.endAt && existing.endAt > requested.startAt
+```
+
+La creación adquiere un bloqueo `PESSIMISTIC_WRITE` sobre la sala antes de consultar solapamientos. El bloqueo permanece hasta finalizar la transacción. La cancelación mantiene el orden: resolver identificador de sala, bloquear sala, leer reserva y actualizar estado.
+
+Para nombres de sala, V2 incorpora `name_key`, columna calculada con `UPPER(name)`, y una restricción única. La restricción resuelve carreras que el chequeo previo de aplicación no puede impedir. El nombre original se conserva para las respuestas.
+
+## 5. Arquitectura
+
+```text
+com.example.roomreservation
+├── domain
+│   ├── model                 # Room, Booking, BookingStatus
+│   └── exception             # Errores de negocio
+├── application
+│   ├── port/in               # Casos de uso
+│   ├── port/out              # Puertos de persistencia
+│   └── service               # Validación, orquestación y transacciones
+└── infrastructure
+    ├── adapter/in/rest       # Controladores, DTOs y errores HTTP
+    ├── adapter/out/persistence # JPA, repositorios y mapeo
+    └── config                # Spring Security
+```
+
+El dominio no depende de Spring ni JPA. La aplicación utiliza Spring para transacciones y Spring Data para paginación. Los adaptadores convierten modelos de dominio y entidades JPA mediante mapeo explícito. Las validaciones de entradas de los casos de uso se ejecutan antes de acceder a persistencia.
+
+H2 permite ejecución local sin servicios externos. Flyway mantiene el esquema versionado. El bloqueo por sala protege también la primera reserva, cuando todavía no existen filas de reservas que bloquear. La defensa de estas decisiones se encuentra en `docs/DECISIONES.md`.
+
+## 6. Migraciones
+
+- V1: tablas `rooms` y `bookings`, claves, restricciones e índices.
+- V2: clave calculada y unicidad de nombres insensible a mayúsculas.
+
+V1 se conserva sin modificaciones. Antes de actualizar una base existente a V2, identificar duplicados:
+
+```sql
+SELECT UPPER(name), COUNT(*)
+FROM rooms
+GROUP BY UPPER(name)
+HAVING COUNT(*) > 1;
+```
+
+Si existen duplicados, deben resolverse antes de aplicar V2. La migración no elimina ni renombra datos automáticamente. Realizar una copia de la base antes de actualizarla. H2 no revierte necesariamente todo el DDL de una migración fallida; si V2 falla, revisar el esquema y el historial Flyway antes de reintentar. No ejecutar reparaciones automáticas sobre datos existentes.
+
+## 7. Errores
+
+Los errores de aplicación 400, 404 y 409 utilizan `application/problem+json` conforme a RFC 9457. Los errores de campos incluyen `violations` con `field` y `message`.
+
+- 400: entrada inválida, identificador no positivo, intervalo inválido o precisión temporal no admitida.
+- 404: sala o reserva inexistente.
+- 409: solapamiento o conflicto de unicidad.
+- 401/403: respuestas de Spring Security; no utilizan necesariamente Problem Details.
+
+## 8. Pruebas y cobertura
+
+```powershell
+.\gradlew.bat clean check bootJar --no-daemon
+```
+
+Las pruebas usan H2 en memoria con migraciones Flyway. La suite incluye seguridad, reglas de reserva, filtros UTC, paginación, cancelación, entradas directas a casos de uso y concurrencia con hilos y transacciones independientes.
+
+JaCoCo genera HTML en `build/reports/jacoco/test/html/index.html` y XML en `build/reports/jacoco/test/jacocoTestReport.xml`. `check` exige al menos 80% en instrucciones y ramas, sin excluir clases. Los resultados JUnit se encuentran en `build/test-results/test/`.
+
+Resultado local del 2026-11-17: **38 pruebas, 0 fallos y 0 errores**; cobertura de instrucciones **95,07%**, líneas **95,17%** y ramas **100%**. Se verificó la migración desde V1 con datos existentes y el rechazo de duplicados tanto en la API concurrente como directamente en la base de datos.
+
+## 9. Integración continua
+
+`.github/workflows/ci.yml` ejecuta `bash ./gradlew clean check bootJar --no-daemon` en Ubuntu y Temurin 21 ante pushes, pull requests o ejecución manual. Publica reportes durante 14 días, incluso ante errores, y el JAR solo si la verificación finaliza correctamente. No realiza despliegues.
+
+El workflow está preparado. Su ejecución remota está pendiente; el repositorio local no tiene remoto configurado en la última revisión.
+
+## 10. Alcance y evolución
+
+La validación corresponde a Java 21 y H2 local. No incluye PostgreSQL, pruebas de carga sostenida ni despliegues distribuidos. La estrategia requiere que todas las escrituras de reservas respeten el bloqueo de sala.
+
+Posibles ampliaciones: PostgreSQL con Testcontainers y restricción de exclusión sobre `tstzrange`, identidad OIDC, métricas y trazas, políticas horarias por sala y medición de consultas para evaluar N+1 en listados.
+
+Tiempo efectivo total: no medido.
+
+## 11. Uso de inteligencia artificial
+
+Se utilizaron Antigravity en la preparación inicial, según el registro del proyecto, y Codex en la implementación de seguridad, ampliación de pruebas, cobertura, correcciones de consistencia, CI y documentación.
+
+- **Skills propias:** se aplicaron instrucciones reutilizables del equipo para Spring Security, persistencia JPA, pruebas unitarias e integración y cobertura JaCoCo. Estas instrucciones guiaron la revisión de convenciones, límites transaccionales, escenarios de prueba y validación. Se prepararon copias locales para OpenCode; su carga en una sesión de OpenCode aún no está verificada.
+- **Plan de implementación:** el trabajo se organizó por fases de configuración, salas, reservas, consultas/cancelación, seguridad, pruebas y entrega. El estado se contrastó con los commits y el árbol de trabajo antes de continuar. Los commits fueron realizados por el desarrollador.
+- **Revisión y comparación:** se compararon contratos REST, esquema SQL, validaciones y documentación con el código existente. Las alternativas de persistencia y bloqueo se evaluaron considerando el alcance local. Las correcciones se contrastaron mediante pruebas automatizadas, reportes de cobertura y comprobaciones de ejecución; también se consultó documentación oficial de H2, Spring Security, OpenCode y GitHub Actions.
+- **Multiagente:** no se ejecutó una revisión con subagentes independientes en las sesiones de Codex registradas. El uso de distintas herramientas a lo largo del desarrollo no constituye una validación multiagente.
+- **Validación:** las afirmaciones de funcionamiento se apoyan en comandos ejecutados y sus resultados. La generación o revisión asistida no sustituye la revisión del desarrollador ni acredita una ejecución remota del pipeline.

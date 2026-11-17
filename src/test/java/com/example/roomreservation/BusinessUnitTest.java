@@ -96,4 +96,25 @@ class BusinessUnitTest {
         service.cancelBooking(2L);
         verify(bookings, times(1)).save(booking);
     }
+    @Test void invalidUseCaseInputsFailBeforePersistence() {
+        for (String responsible : new String[]{null, "", " ", "x".repeat(121)}) {
+            assertThat(assertThrows(BadRequestException.class,
+                    () -> service.createBooking(1L, responsible, start, end))).hasMessageContaining("responsible");
+        }
+        for (Long id : new Long[]{null, 0L, -1L}) {
+            assertThat(assertThrows(BadRequestException.class, () -> roomService.getRoomById(id))).hasMessageContaining("positive");
+            assertThat(assertThrows(BadRequestException.class, () -> service.getBookingById(id))).hasMessageContaining("positive");
+            assertThat(assertThrows(BadRequestException.class, () -> service.cancelBooking(id))).hasMessageContaining("positive");
+            assertThat(assertThrows(BadRequestException.class, () -> service.createBooking(id,"A",start,end))).hasMessageContaining("roomId");
+        }
+        for (int capacity : new int[]{0, -1, 1001}) {
+            assertThat(assertThrows(BadRequestException.class, () -> roomService.createRoom("A",capacity))).hasMessageContaining("capacity");
+        }
+        assertThat(assertThrows(BadRequestException.class, () -> roomService.createRoom("x".repeat(101),1))).hasMessageContaining("name");
+        assertThat(assertThrows(BadRequestException.class, () -> service.createBooking(1L,"A",start.plusNanos(1),end)))
+                .hasMessageContaining("microsecond");
+        assertThat(assertThrows(BadRequestException.class, () -> service.createBooking(1L,"A",start,end.plusNanos(1))))
+                .hasMessageContaining("microsecond");
+        verifyNoInteractions(rooms, bookings);
+    }
 }

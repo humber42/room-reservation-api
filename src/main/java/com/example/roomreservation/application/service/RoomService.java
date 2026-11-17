@@ -27,6 +27,12 @@ public class RoomService implements CreateRoomUseCase, GetRoomUseCase {
         if (name == null || name.strip().isBlank()) {
             throw new BadRequestException("name is required");
         }
+        if (name.length() > 100) {
+            throw new BadRequestException("name must not exceed 100 characters");
+        }
+        if (capacity != null && (capacity < 1 || capacity > 1000)) {
+            throw new BadRequestException("capacity must be between 1 and 1000");
+        }
         String cleanName = name.strip();
         if (roomRepositoryPort.existsByNameIgnoreCase(cleanName)) {
             throw new ConflictException("A room with that name already exists");
@@ -44,6 +50,9 @@ public class RoomService implements CreateRoomUseCase, GetRoomUseCase {
     @Override
     @Transactional(readOnly = true)
     public Room getRoomById(Long id) {
+        if (id == null || id <= 0) {
+            throw new BadRequestException("id must be positive");
+        }
         return roomRepositoryPort.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: " + id));
     }

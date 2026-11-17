@@ -108,4 +108,34 @@ class BookingIntegrationTest {
         mvc.perform(get("/api/bookings").param("roomId", ""+room))
                 .andExpect(jsonPath("$.totalElements").value(1));
     }
+    @Test
+    void timestampPrecisionIsValidatedBeforeStorage() throws Exception {
+        long room = room();
+        book(room,"2026-12-01T10:00:00.000000001Z","2026-12-01T10:00:00.000000002Z")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail").value("timestamps must use microsecond precision or coarser"));
+        String location = book(room,"2026-12-01T10:00:00.000001Z","2026-12-01T10:00:00.000002Z")
+                .andExpect(status().isCreated()).andReturn().getResponse().getHeader("Location");
+        mvc.perform(get(location)).andExpect(jsonPath("$.startAt").value("2026-12-01T10:00:00.000001Z"))
+                .andExpect(jsonPath("$.endAt").value("2026-12-01T10:00:00.000002Z"));
+        book(room,"2026-12-01T10:00:00.000002Z","2026-12-01T10:00:00.000003Z").andExpect(status().isCreated());
+    }
+
+    @Test
+    void simultaneousCaseVariantsCreateOnlyOneRoom() throws Exception {
+        String name = "Race-" + UUID.randomUUID();
+        var barrier = new CyclicBarrier(2);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var futures = new java.util.ArrayList<Future<Integer>>();
+            for (String variant : java.util.List.of(name.toLowerCase(java.util.Locale.ROOT), name.toUpperCase(java.util.Locale.ROOT))) {
+                futures.add(pool.submit(() -> {
+                    barrier.await(10, TimeUnit.SECONDS);
+                    return mvc.perform(post("/api/rooms").with(httpBasic("reviewer","test-password"))
+                            .contentType("application/json").content("{\"name\":\"" + variant + "\"}"))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            assertThat(java.util.List.of(futures.get(0).get(20, TimeUnit.SECONDS), futures.get(1).get(20, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(201,409);
+        }
+    }
 }
