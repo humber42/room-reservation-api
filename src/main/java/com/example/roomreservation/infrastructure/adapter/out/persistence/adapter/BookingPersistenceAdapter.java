@@ -8,6 +8,8 @@ import com.example.roomreservation.infrastructure.adapter.out.persistence.entity
 import com.example.roomreservation.infrastructure.adapter.out.persistence.entity.RoomJpaEntity;
 import com.example.roomreservation.infrastructure.adapter.out.persistence.repository.SpringDataBookingRepository;
 import com.example.roomreservation.infrastructure.adapter.out.persistence.repository.SpringDataRoomRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -54,6 +56,30 @@ public class BookingPersistenceAdapter implements BookingRepositoryPort {
     @Override
     public Optional<Booking> findById(Long bookingId) {
         return springDataBookingRepository.findById(bookingId)
+                .map(BookingJpaEntity::toDomain);
+    }
+
+    @Override
+    public Page<Booking> findAll(Pageable pageable) {
+        return springDataBookingRepository.findAll(pageable)
+                .map(BookingJpaEntity::toDomain);
+    }
+
+    @Override
+    public Page<Booking> findByRoomId(Long roomId, Pageable pageable) {
+        return springDataBookingRepository.findByRoom_Id(roomId, pageable)
+                .map(BookingJpaEntity::toDomain);
+    }
+
+    @Override
+    public Page<Booking> findByDateRange(Instant start, Instant end, Pageable pageable) {
+        return springDataBookingRepository.findByStartAtLessThanAndEndAtGreaterThan(end, start, pageable)
+                .map(BookingJpaEntity::toDomain);
+    }
+
+    @Override
+    public Page<Booking> findByRoomIdAndDateRange(Long roomId, Instant start, Instant end, Pageable pageable) {
+        return springDataBookingRepository.findByRoom_IdAndStartAtLessThanAndEndAtGreaterThan(roomId, end, start, pageable)
                 .map(BookingJpaEntity::toDomain);
     }
 }

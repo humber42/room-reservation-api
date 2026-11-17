@@ -2,6 +2,8 @@ package com.example.roomreservation.infrastructure.adapter.out.persistence.repos
 
 import com.example.roomreservation.domain.model.BookingStatus;
 import com.example.roomreservation.infrastructure.adapter.out.persistence.entity.BookingJpaEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,4 +22,19 @@ public interface SpringDataBookingRepository extends JpaRepository<BookingJpaEnt
 
     @Query("select b.room.id from BookingJpaEntity b where b.id = :id")
     Optional<Long> findRoomIdByBookingId(@Param("id") Long id);
+
+    Page<BookingJpaEntity> findByRoom_Id(Long roomId, Pageable pageable);
+
+    Page<BookingJpaEntity> findByStartAtLessThanAndEndAtGreaterThan(
+            Instant dayEnd,
+            Instant dayStart,
+            Pageable pageable
+    );
+
+    Page<BookingJpaEntity> findByRoom_IdAndStartAtLessThanAndEndAtGreaterThan(
+            Long roomId,
+            Instant dayEnd,
+            Instant dayStart,
+            Pageable pageable
+    );
 }
